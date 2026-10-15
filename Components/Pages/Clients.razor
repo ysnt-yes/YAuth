@@ -1,6 +1,67 @@
-﻿@page "/Clients"
-<h3>Clients</h3>
+﻿@page "/clients"
+@using YAuth.Components.Shared
+@using YAuth.Endpoints
+@inject IOpenIddictApplicationManager ApplicationManager
+
+<PageTitle>Clients</PageTitle>
+
+<div class="container my-4" style="max-width: 900px;">
+    <h3 class="mb-4">OAuth Client Management</h3>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Register New Application</h5>
+            <button class="btn btn-success" commandfor="newClientDialog" command="show-modal">+</button>
+        </div>
+        
+        <dialog class="card-body" id="newClientDialog">
+            <form hx-post="/api/client"
+                  hx-swap="none"
+                  x-on:refreshclientlist.window="clientNameInput = '';"
+                  class="form-group">
+
+                <AntiforgeryToken/>
+
+                <div class="mb-3">
+                    <label for="clientName" class="form-label font-weight-bold">Application Display Name</label>
+                    <input type="text"
+                           id="clientName"
+                           name="ClientName"
+                           class="form-control"
+                           placeholder="e.g., Billing Service API Portal"
+                           required/>
+                </div>
+
+                <div class="text-end">
+                    <button type="button" class="btn btn-secondary me-2" onclick="document.getElementById('newClientDialog').close()">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4">Register Application</button>
+                </div>
+            </form>
+        </dialog>
+    </div>
+
+    <div hx-get="/api/client/list"
+         hx-trigger="refreshClientList from:body"
+         hx-target="#client-inventory-list"
+         hx-swap="outerHTML">
+        <div id="client-inventory-list">
+            <OpenIdClientList Model="InitialClients"/>
+        </div>
+    </div>
+</div>
 
 @code {
-  
+    private List<OpenIdApplicationDescriptor> InitialClients { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await foreach (var app in ApplicationManager.ListAsync())
+        {
+            InitialClients.Add(new OpenIdApplicationDescriptor(
+                await ApplicationManager.GetClientIdAsync(app) ?? "Unknown",
+                await ApplicationManager.GetDisplayNameAsync(app) ?? "Unnamed App",
+                await ApplicationManager.GetClientTypeAsync(app) ?? "Unknown"
+            ));
+        }
+    }
 }

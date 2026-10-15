@@ -1,0 +1,98 @@
+﻿@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<User> SignInManager
+@inject UserManager<User> UserManager
+@inject NavigationManager NavigationManager
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Log In</PageTitle>
+
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 75vh;">
+    <div class="card p-4 shadow-sm" style="width: 100%; max-width: 420px;">
+        <h3 class="card-title text-center mb-3">YAuth Single-Tenant Portal</h3>
+        <hr/>
+
+        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="LoginForm">
+            <DataAnnotationsValidator/>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="alert alert-danger py-2 small">@ErrorMessage</div>
+            }
+
+            <div class="mb-3">
+                <label for="username" class="form-label">Username / Email</label>
+                <InputText id="username" class="form-control" @bind-Value="Input.Username" autocomplete="username"/>
+                <ValidationMessage For="() => Input.Username" class="text-danger small"/>
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <InputText id="password" type="password" class="form-control" @bind-Value="Input.Password" autocomplete="current-password"/>
+                <ValidationMessage For="() => Input.Password" class="text-danger small"/>
+            </div>
+
+            <div class="mb-3 form-check">
+                <InputCheckbox id="rememberMe" class="form-check-input" @bind-Value="Input.RememberMe"/>
+                <label class="form-check-label" for="rememberMe">Remember me</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-2">Sign In</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm] 
+    private LoginInputModel Input { get; set; } = new();
+    
+    private string? ErrorMessage { get; set; }
+
+    protected override void OnInitialized()
+    {
+        var context = HttpContextAccessor.HttpContext ?? throw new NullReferenceException();
+        if (HttpMethods.IsGet(context.Request.Method) && context.User.Identity?.IsAuthenticated == true)
+        {
+            NavigationManager.NavigateTo("/clients");
+        }
+    }
+
+    private async Task LoginUser()
+    {
+        ErrorMessage = null;
+
+        var user = await UserManager.FindByNameAsync(Input.Username) ?? await UserManager.FindByEmailAsync(Input.Username);
+        if (user == null)
+        {
+            ErrorMessage = "Invalid username or password validation credentials.";
+            return;
+        }
+
+        var result = await SignInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        
+        if (result.Succeeded)
+        {
+            NavigationManager.NavigateTo("/clients", forceLoad: true);
+        }
+        else if (result.IsLockedOut)
+        {
+            ErrorMessage = "This account has been locked out.";
+        }
+        else
+        {
+            ErrorMessage = "Invalid username or password validation credentials.";
+        }
+    }
+
+    public class LoginInputModel
+    {
+        [Required(ErrorMessage = "Username is mandatory.")]
+        public string Username { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password is mandatory.")]
+        public string Password { get; set; } = string.Empty;
+    
+        public bool RememberMe { get; set; }
+    }
+}

@@ -1,5 +1,39 @@
-﻿<h3>OpenIdClientList</h3>
-
+﻿@using YAuth.Endpoints
 @code {
-  
+  [Parameter] public List<OpenIdApplicationDescriptor> Model { get; set; } = [];
 }
+<div class="card shadow-sm" id="client-inventory-list">
+  <div class="card-header bg-light">
+    <h5 class="mb-0 text-secondary">Active Registered Applications</h5>
+  </div>
+  <div class="card-body p-0">
+    @if (!Model.Any())
+    {
+      <div class="p-4 text-center text-muted">
+        <p class="mb-0">No active client applications registered for this tenant space.</p>
+      </div>
+    }
+    else
+    {
+      <div class="list-group list-group-flush">
+        @foreach (var client in Model)
+        {
+          <div class="list-group-item d-flex justify-content-between align-items-center p-3">
+            <div>
+              <h6 class="mb-1 text-dark">@client.DisplayName</h6>
+              <div class="small text-muted font-monospace">Client ID: @client.ClientId</div>
+            </div>
+            <div class="text-end">
+              <span class="badge bg-secondary mb-1">@client.ClientType</span>
+            </div>
+            <button
+              hx-delete="/api/client?clientId=@client.ClientId"
+              hx-confirm="Are you sure?"
+              class="btn btn-danger"
+              >Delete</button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

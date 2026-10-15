@@ -1,6 +1,8 @@
-﻿namespace YAuth.Data;
+﻿using Microsoft.AspNetCore.Identity;
 
-public class User
+namespace YAuth.Data;
+
+public class User : IdentityUser
 {
     
 }

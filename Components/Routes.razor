@@ -1,5 +1,17 @@
-﻿<h3>Routes</h3>
-
-@code {
-  
-}
+﻿<Router AppAssembly="@typeof(Program).Assembly" NotFoundPage="@typeof(NotFoundPage)">
+  <Found Context="routeData">
+    <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+      <NotAuthorized>
+        <div class="container m-4">
+          <div class="alert alert-danger p-4 shadow-sm">
+            <h4 class="alert-heading">Authentication Required</h4>
+            <p>You do not have permission to view this page.</p>
+            <hr>
+            <a class="btn btn-outline-danger" href="/login">Navigate to Login</a>
+          </div>
+        </div>
+      </NotAuthorized>
+    </AuthorizeRouteView>
+    <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+  </Found>
+</Router>
