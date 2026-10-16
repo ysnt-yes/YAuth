@@ -1,6 +1,6 @@
 ﻿@page "/clients"
+@using OpenIddict.EntityFrameworkCore.Models
 @using YAuth.Components.Shared
-@using YAuth.Endpoints
 @inject IOpenIddictApplicationManager ApplicationManager
 
 <PageTitle>Clients</PageTitle>
@@ -17,6 +17,7 @@
         <dialog class="card-body" id="newClientDialog">
             <form hx-post="/api/client"
                   hx-swap="none"
+                  hx-on::after:request="this.closest('dialog').close()"
                   x-on:refreshclientlist.window="clientNameInput = '';"
                   class="form-group">
 
@@ -33,7 +34,7 @@
                 </div>
 
                 <div class="text-end">
-                    <button type="button" class="btn btn-secondary me-2" onclick="document.getElementById('newClientDialog').close()">Cancel</button>
+                    <button type="button" class="btn btn-secondary me-2" onclick="this.closest('dialog').close()">Cancel</button>
                     <button type="submit" class="btn btn-primary px-4">Register Application</button>
                 </div>
             </form>
@@ -51,17 +52,13 @@
 </div>
 
 @code {
-    private List<OpenIdApplicationDescriptor> InitialClients { get; set; } = [];
+    private List<OpenIddictEntityFrameworkCoreApplication> InitialClients { get; set; } = [];
 
     protected override async Task OnInitializedAsync()
     {
         await foreach (var app in ApplicationManager.ListAsync())
         {
-            InitialClients.Add(new OpenIdApplicationDescriptor(
-                await ApplicationManager.GetClientIdAsync(app) ?? "Unknown",
-                await ApplicationManager.GetDisplayNameAsync(app) ?? "Unnamed App",
-                await ApplicationManager.GetClientTypeAsync(app) ?? "Unknown"
-            ));
+            InitialClients.Add((OpenIddictEntityFrameworkCoreApplication)app);
         }
     }
 }

@@ -1,14 +1,13 @@
 ﻿using System.Security.Cryptography;
-using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
+using OpenIddict.EntityFrameworkCore.Models;
 using YAuth.Components.Shared;
 
 namespace YAuth.Endpoints;
 
-public record struct NewOpenIdClientRequest(string ClientName);
-public record struct OpenIdApplicationDescriptor(string ClientId, string DisplayName, string ClientType);
+public record NewOpenIdClientRequest(string ClientName);
 
 public class ClientEndpoints : IEndpoint
 {
@@ -17,7 +16,7 @@ public class ClientEndpoints : IEndpoint
         var routeGroup = endpoints.MapGroup("client");
         routeGroup.MapGet("/list", ListAllClients);
         routeGroup.MapPost("/", AddClient);
-        routeGroup.MapDelete("/", DeleteCLient);
+        routeGroup.MapDelete("/", DeleteClient);
     }
 
     private static async Task<IResult> AddClient(HttpContext context, [FromServices] ILogger<ClientEndpoints> logger, [FromServices] IOpenIddictApplicationManager applicationManager, [FromForm] NewOpenIdClientRequest request)
@@ -67,7 +66,7 @@ public class ClientEndpoints : IEndpoint
         return Results.Ok();
     }
 
-    private static async Task<IResult> DeleteCLient([FromServices] ILogger<ClientEndpoints> logger,
+    private static async Task<IResult> DeleteClient([FromServices] ILogger<ClientEndpoints> logger,
         [FromServices] IOpenIddictApplicationManager applicationManager, HttpContext context, [FromQuery] string clientId)
     {
         var application = await applicationManager.FindByClientIdAsync(clientId);
@@ -87,18 +86,13 @@ public class ClientEndpoints : IEndpoint
     private static async Task<IResult> ListAllClients([FromServices] ILogger<ClientEndpoints> logger,
         [FromServices] IOpenIddictApplicationManager applicationManager)
     {
-        var clientList = new List<OpenIdApplicationDescriptor>();
+        var clientList = new List<OpenIddictEntityFrameworkCoreApplication>();
 
         try
         {
             await foreach (var app in applicationManager.ListAsync())
             {
-                clientList.Add(new OpenIdApplicationDescriptor
-                {
-                    ClientId = await applicationManager.GetClientIdAsync(app) ?? "Unknown",
-                    DisplayName = await applicationManager.GetDisplayNameAsync(app) ?? "Unnamed App",
-                    ClientType = await applicationManager.GetClientTypeAsync(app) ?? "Unknown"
-                });
+                clientList.Add((OpenIddictEntityFrameworkCoreApplication)app);
             }
         }
         catch (Exception ex)

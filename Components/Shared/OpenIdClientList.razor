@@ -1,6 +1,7 @@
-﻿@using YAuth.Endpoints
+﻿@using OpenIddict.EntityFrameworkCore.Models
+
 @code {
-  [Parameter] public List<OpenIdApplicationDescriptor> Model { get; set; } = [];
+  [Parameter] public List<OpenIddictEntityFrameworkCoreApplication> Model { get; set; } = [];
 }
 <div class="card shadow-sm" id="client-inventory-list">
   <div class="card-header bg-light">
@@ -10,7 +11,7 @@
     @if (!Model.Any())
     {
       <div class="p-4 text-center text-muted">
-        <p class="mb-0">No active client applications registered for this tenant space.</p>
+        <p class="mb-0">No active client applications registered.</p>
       </div>
     }
     else
