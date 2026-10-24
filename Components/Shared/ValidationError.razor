@@ -1,0 +1,19 @@
+﻿<div class="alert alert-danger mb-4">
+    <strong class="d-block mb-1">@Title</strong>
+    @if (ErrorMessages.Any())
+    {
+        <ul class="mb-0 ps-3">
+            @foreach (var error in ErrorMessages)
+            {
+                <li>@error</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter] public required string Title { get; set; }
+
+    [Parameter] public List<string> ErrorMessages { get; set; } = [];
+
+}

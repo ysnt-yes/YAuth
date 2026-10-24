@@ -5,16 +5,15 @@ namespace YAuth.Extensions;
 
 public static class EndpointExtensions
 {
-    public static void MapEndpoints(this IEndpointRouteBuilder app)
+    public static void MapYAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var endpointTypes = Assembly.GetExecutingAssembly()
-            .GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && t.IsAssignableTo(typeof(IEndpoint)));
-
-        foreach (var type in endpointTypes)
-        {
-            var method = type.GetMethod(nameof(IEndpoint.RegisterRoutes), BindingFlags.Public | BindingFlags.Static);
-            method?.Invoke(null, [app]);
-        }
+        var authGroup = endpoints.MapGroup("auth");
+        AuthEndpoints.RegisterRoutes(authGroup);
+        
+        var apiGroup = endpoints.MapGroup("api");
+        ClientEndpoints.RegisterRoutes(apiGroup);
+        
+        var oidcGroup = endpoints.MapGroup("oidc");
+        OidcEndpoints.RegisterRoutes(oidcGroup);
     }
 }

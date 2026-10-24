@@ -1,6 +1,10 @@
 ﻿@page "/clients"
+
+@attribute [Authorize(Policy = Policies.AdminPolicy)]
+
 @using OpenIddict.EntityFrameworkCore.Models
 @using YAuth.Components.Shared
+@using YAuth.Endpoints
 @inject IOpenIddictApplicationManager ApplicationManager
 
 <PageTitle>Clients</PageTitle>
@@ -13,31 +17,19 @@
             <h5 class="mb-0">Register New Application</h5>
             <button class="btn btn-success" commandfor="newClientDialog" command="show-modal">+</button>
         </div>
-        
+
         <dialog class="card-body" id="newClientDialog">
-            <form hx-post="/api/client"
-                  hx-swap="none"
-                  hx-on::after:request="this.closest('dialog').close()"
-                  x-on:refreshclientlist.window="clientNameInput = '';"
-                  class="form-group">
-
-                <AntiforgeryToken/>
-
-                <div class="mb-3">
-                    <label for="clientName" class="form-label font-weight-bold">Application Display Name</label>
-                    <input type="text"
-                           id="clientName"
-                           name="ClientName"
-                           class="form-control"
-                           placeholder="e.g., Billing Service API Portal"
-                           required/>
-                </div>
-
-                <div class="text-end">
-                    <button type="button" class="btn btn-secondary me-2" onclick="this.closest('dialog').close()">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4">Register Application</button>
-                </div>
-            </form>
+            <DynamicForm
+                TModel="NewOpenIdClientRequest"
+                method="post"
+                hx-post="/api/client/create"
+                hx-swap="none"
+                hx-on::after:request="this.closest('dialog').close()"
+                x-on:refreshclientlist.window="clientNameInput = '';"
+                class="form-group"
+                data-enhance-nav="false"
+                CancelButtonText="Cancel"
+                cancel-onclick="this.closest('dialog').close()" />
         </dialog>
     </div>
 
