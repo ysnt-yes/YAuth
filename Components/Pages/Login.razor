@@ -1,11 +1,12 @@
 ﻿@page "/login"
 @using System.ComponentModel.DataAnnotations
-@using Microsoft.AspNetCore.Identity
-@inject SignInManager<User> SignInManager
-@inject UserManager<User> UserManager
+@using System.Net
+@using YAuth.Components.Shared
+@using YAuth.Endpoints
 @inject NavigationManager NavigationManager
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IConfiguration Config
+@inject ILogger<Login> Logger
 
 <PageTitle>Log In</PageTitle>
 
@@ -14,41 +15,49 @@
         <h3 class="card-title text-center mb-3">@(Config["AppName"] ?? "YAuth")</h3>
         <hr/>
 
-        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="LoginForm">
-            <DataAnnotationsValidator/>
-
-            @if (!string.IsNullOrEmpty(ErrorMessage))
-            {
-                <div class="alert alert-danger py-2 small">@ErrorMessage</div>
-            }
-
-            <div class="mb-3">
-                <label for="username" class="form-label">Username / Email</label>
-                <InputText id="username" class="form-control" @bind-Value="Input.Username" autocomplete="username"/>
-                <ValidationMessage For="() => Input.Username" class="text-danger small"/>
+        <input type="hidden" id="hidden-return-url" name="ReturnUrl" value="@(WebUtility.UrlDecode(ReturnUrl))" />
+        
+        <DynamicForm
+            TModel="LoginDto"
+            hx-post="/auth/login"
+            hx-include="#hidden-return-url"
+            hx-target="#error-container"
+        />
+        
+        <div id="error-container"></div>
+        
+        @if (ConfiguredProviders.Any())
+        {
+            <div class="text-center my-3 text-muted position-relative">
+                <hr />
+                <span class="bg-white px-2 position-absolute top-50 start-50 translate-middle">or log in with</span>
             </div>
 
-            <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
-                <InputText id="password" type="password" class="form-control" @bind-Value="Input.Password"
-                           autocomplete="current-password"/>
-                <ValidationMessage For="() => Input.Password" class="text-danger small"/>
-            </div>
+            <div class="d-flex flex-column gap-2">
+                @foreach (var provider in ConfiguredProviders)
+                {
+                    var challengeUrl = $"/auth/challenge/{provider.Id}?returnUrl={Uri.EscapeDataString(ReturnUrl ?? "/")}";
 
-            <div class="mb-3 form-check">
-                <InputCheckbox id="rememberMe" class="form-check-input" @bind-Value="Input.RememberMe"/>
-                <label class="form-check-label" for="rememberMe">Remember me</label>
+                    <a href="@challengeUrl" class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2">
+                        @provider.DisplayName
+                    </a>
+                }
             </div>
-
-            <button type="submit" class="btn btn-primary w-100 py-2">Sign In</button>
-        </EditForm>
+        }
     </div>
 </div>
 
+
+
 @code {
     [SupplyParameterFromForm] private LoginInputModel Input { get; set; } = new();
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
     
     private string? ErrorMessage { get; set; }
+
+    private List<ExternalAuthProvider> ConfiguredProviders => Config.GetSection("Authentication:Providers").Get<List<ExternalAuthProvider>>() ?? [];
 
     protected override void OnInitialized()
     {
@@ -56,33 +65,6 @@
         if (HttpMethods.IsGet(context.Request.Method) && context.User.Identity?.IsAuthenticated == true)
         {
             NavigationManager.NavigateTo("/clients");
-        }
-    }
-
-    private async Task LoginUser()
-    {
-        ErrorMessage = null;
-
-        var user = await UserManager.FindByNameAsync(Input.Username) ?? await UserManager.FindByEmailAsync(Input.Username);
-        if (user == null)
-        {
-            ErrorMessage = "Invalid username or password validation credentials.";
-            return;
-        }
-
-        var result = await SignInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, lockoutOnFailure: false);
-
-        if (result.Succeeded)
-        {
-            NavigationManager.NavigateTo("/clients", forceLoad: true);
-        }
-        else if (result.IsLockedOut)
-        {
-            ErrorMessage = "This account has been locked out.";
-        }
-        else
-        {
-            ErrorMessage = "Invalid username or password validation credentials.";
         }
     }
 

@@ -12,6 +12,7 @@ public static class EndpointExtensions
         
         var apiGroup = endpoints.MapGroup("api");
         ClientEndpoints.RegisterRoutes(apiGroup);
+        ApiEndpoints.RegisterRoutes(apiGroup);
         
         var oidcGroup = endpoints.MapGroup("oidc");
         OidcEndpoints.RegisterRoutes(oidcGroup);

@@ -13,6 +13,7 @@ namespace YAuth.Endpoints;
 public record NewOpenIdClientRequest
 {
     [Required] public string ClientName { get; init; } = string.Empty;
+    [Required] public string RedirectUrl { get; init; } = string.Empty;
 };
 
 public abstract class ClientEndpoints : IEndpoint
@@ -20,14 +21,14 @@ public abstract class ClientEndpoints : IEndpoint
     public static void RegisterRoutes(IEndpointRouteBuilder endpoints)
     {
         var routeGroup = endpoints.MapGroup("client");
-        routeGroup.MapGet("/list", ListAllClients).RequireAuthorization(Policies.AdminPolicy);
-        routeGroup.MapPost("/create", AddClient).RequireAuthorization(Policies.AdminPolicy);
-        routeGroup.MapDelete("/", DeleteClient).RequireAuthorization(Policies.AdminPolicy);
+        routeGroup.MapGet("/list", ListAllClients).RequireAuthorization(Policies.ValidUserPolicy,Policies.AdminPolicy);
+        routeGroup.MapPost("/create", AddClient).RequireAuthorization(Policies.ValidUserPolicy,Policies.AdminPolicy);
+        routeGroup.MapDelete("/", DeleteClient).RequireAuthorization(Policies.ValidUserPolicy,Policies.AdminPolicy);
     }
 
     private static async Task<IResult> AddClient(
         [FromForm] NewOpenIdClientRequest request,
-        HttpContext context,
+        [FromServices] HttpContext context,
         [FromServices] ILogger<ClientEndpoints> logger,
         [FromServices] IOpenIddictApplicationManager applicationManager)
     {
@@ -46,7 +47,7 @@ public abstract class ClientEndpoints : IEndpoint
             ClientType = OpenIddictConstants.ClientTypes.Confidential,
             ClientSecret = generatedSecret,
 
-            RedirectUris = { new Uri("https://localhost:5001/signin-oidc") },
+            RedirectUris = { new Uri(request.RedirectUrl) },
 
             Permissions =
             {
@@ -55,6 +56,10 @@ public abstract class ClientEndpoints : IEndpoint
                 OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
                 OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
                 OpenIddictConstants.Permissions.ResponseTypes.Code,
+                
+                OpenIddictConstants.Permissions.Prefixes.Scope + "openid",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "profile",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "email"
             },
             Requirements =
             {
@@ -79,7 +84,7 @@ public abstract class ClientEndpoints : IEndpoint
     private static async Task<IResult> DeleteClient(
         [FromServices] ILogger<ClientEndpoints> logger,
         [FromServices] IOpenIddictApplicationManager applicationManager,
-        HttpContext context,
+        [FromServices] HttpContext context,
         [FromQuery] string clientId)
     {
         var application = await applicationManager.FindByClientIdAsync(clientId);
@@ -98,7 +103,8 @@ public abstract class ClientEndpoints : IEndpoint
 
     private static async Task<IResult> ListAllClients(
         [FromServices] ILogger<ClientEndpoints> logger,
-        [FromServices] IOpenIddictApplicationManager applicationManager)
+        [FromServices] IOpenIddictApplicationManager applicationManager,
+        [FromServices] HttpContext context)
     {
         var clientList = new List<OpenIddictEntityFrameworkCoreApplication>();
 
@@ -115,6 +121,11 @@ public abstract class ClientEndpoints : IEndpoint
             return Results.Problem("Unable to load client inventories.");
         }
 
+        var acceptHeader = context.Request.Headers.Accept.ToString();
+        if (acceptHeader.Contains("application/json", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Ok(clientList);
+        }
         return new RazorComponentResult<OpenIdClientList>(new { Model = clientList });
     }
 }

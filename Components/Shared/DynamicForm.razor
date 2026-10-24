@@ -7,7 +7,8 @@
     @foreach (var prop in _properties)
     {
         var meta = GetFieldMetadata(prop);
-
+        if(meta is null) continue;
+        
         <div class="form-group mb-3">
             <label for="@meta.Id" class="form-label">@meta.Label</label>
 
@@ -78,7 +79,7 @@
 
     private object? GetPropValue(PropertyInfo prop) => prop.GetValue(Model);
 
-    private static FieldMeta GetFieldMetadata(PropertyInfo prop)
+    private static FieldMeta? GetFieldMetadata(PropertyInfo prop)
     {
         var displayAttr = prop.GetCustomAttribute<DisplayAttribute>();
         var requiredAttr = prop.GetCustomAttribute<RequiredAttribute>();
@@ -86,6 +87,8 @@
         var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
         var regexAttr = prop.GetCustomAttribute<RegularExpressionAttribute>();
         var dataTypeAttr = prop.GetCustomAttribute<DataTypeAttribute>();
+
+        if (displayAttr?.GroupName is "Hidden") return null;
 
         var inputType = "text";
         if (dataTypeAttr != null)

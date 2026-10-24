@@ -1,7 +1,11 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
+using OpenIddict.Client;
+using OpenIddict.EntityFrameworkCore.Models;
 using YAuth.Components;
 using YAuth.Data;
 using YAuth.Extensions;
@@ -10,37 +14,53 @@ using YAuth.Utils;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
+var contentRootPath = builder.Environment.ContentRootPath;
+var storagePath = Path.Combine(contentRootPath, "storage");
+
 builder.Services.AddRazorComponents();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseSqlite(configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlite(configuration.GetConnectionString("DefaultConnection") ?? $"Data Source={storagePath}/yauth.db");
     options.UseOpenIddict();
 });
 
-builder.Services.AddIdentity<User, IdentityRole>()
+builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+    .AddCookie(IdentityConstants.ApplicationScheme, options =>
+    {
+        options.AccessDeniedPath = new PathString("/forbidden");
+        options.LoginPath = new PathString("/login");
+        options.LogoutPath = new PathString("/logout");
+    })
+    .AddCookie(IdentityConstants.ExternalScheme);
+
+builder.Services.AddIdentityCore<User>()
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
+    .AddSignInManager()
     .AddDefaultTokenProviders();
 
-var certsFolder = Path.Combine(builder.Environment.ContentRootPath, "bin/Debug/certs");
-var certPassword = configuration["Certs:Password"] ?? "SuperSecretHomelabPassword123!";
-var signingCertificate = CertificateManager.GetOrCreateSigningCertificate(certsFolder, certPassword);
+var certsFolder = Path.Combine(storagePath, "certs");
+var certPassword = configuration["Crypto:CertPassword"];
+var signingCertificate = CertificateManager.GetOrCreateSigningCertificate(certsFolder, certPassword ?? throw new InvalidOperationException("Cert Password is NOT SET. Set `Certs__Password` in ENV."));
 var symmetricEncryptionKey = new SymmetricSecurityKey(
-    Convert.FromBase64String("eGztWK7NMvHAqUZrczQgLKjH8oFSg0ovnknlfahXxGg="));
+    Convert.FromBase64String(configuration["Crypto:EncryptionKey"] ?? throw new InvalidOperationException("Encryption Key is NOT SET!")));
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
     {
         options.UseEntityFrameworkCore()
             .UseDbContext<AppDbContext>();
+        
+        options.ReplaceApplicationManager<OpenIddictEntityFrameworkCoreApplication, PlainTextApplicationManager<OpenIddictEntityFrameworkCoreApplication>>();
     })
     .AddServer(options =>
     {
         options
-            .SetAuthorizationEndpointUris("/connect/authorize")
-            .SetTokenEndpointUris("/connect/token")
-            .SetUserInfoEndpointUris("/connect/userinfo")
-            .SetJsonWebKeySetEndpointUris("/connect/jwks");
+            .SetAuthorizationEndpointUris("/oidc/connect/authorize")
+            .SetTokenEndpointUris("/oidc/connect/token")
+            .SetUserInfoEndpointUris("/oidc/connect/userinfo")
+            .SetJsonWebKeySetEndpointUris("/oidc/connect/jwks");
 
         options
             .AllowAuthorizationCodeFlow()
@@ -51,7 +71,7 @@ builder.Services.AddOpenIddict()
             OpenIddictConstants.Scopes.OpenId,
             OpenIddictConstants.Scopes.Email,
             OpenIddictConstants.Scopes.Profile,
-            "groups"
+            OpenIddictConstants.Scopes.Roles
         );
 
         options.DisableAccessTokenEncryption();
@@ -71,12 +91,61 @@ builder.Services.AddOpenIddict()
     {
         options.UseLocalServer();
         options.UseAspNetCore();
+    })
+    .AddClient(options =>
+    {
+        options.AllowAuthorizationCodeFlow();
+
+        options.UseAspNetCore()
+            .DisableTransportSecurityRequirement()
+            .EnableRedirectionEndpointPassthrough()
+            .EnablePostLogoutRedirectionEndpointPassthrough();
+        
+        options.AddSigningCertificate(signingCertificate);
+        options.AddEncryptionKey(symmetricEncryptionKey);
+
+        var externalAuthProviders = configuration.GetSection("Authentication:Providers").Get<List<ExternalAuthProvider>>() ?? [];
+        
+        var webProviders = options.UseWebProviders();
+
+        foreach (var p in externalAuthProviders)
+        {
+            if (string.Equals(p.Type, "Discord", StringComparison.OrdinalIgnoreCase))
+            {
+                webProviders.AddDiscord(discord =>
+                {
+                    discord.SetClientId(p.ClientId)
+                        .SetProviderDisplayName("Discord")
+                        .SetRegistrationId("discord")
+                        .SetClientSecret(p.ClientSecret)
+                        .AddScopes("identify", "email")
+                        .SetRedirectUri("/auth/callback");
+                });
+            }
+            else if (string.Equals(p.Type, "Custom", StringComparison.OrdinalIgnoreCase))
+            {
+                options.AddRegistration(new OpenIddictClientRegistration
+                {
+                    Issuer = new Uri(p.Authority ?? throw new Exception("Missing OIDC Issuer")),
+                    ClientId = p.ClientId,
+                    ClientSecret = p.ClientSecret,
+                    RedirectUri = new Uri($"/signin-oidc-{p.Id}", UriKind.Relative)
+                });
+            }
+        }
     });
 
 builder.Services.AddAuthentication();
-builder.Services.AddAuthorization(options =>
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(Policies.AdminPolicy, Policies.AdminPolicyBuilder)
+    .AddPolicy(Policies.ValidUserPolicy, Policies.ValidUserPolicyBuilder);
+
+var cookiePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+
+builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.ExternalScheme, options =>
 {
-    options.AddPolicy(Policies.AdminPolicy, Policies.AdminPolicyBuilder);
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = cookiePolicy; 
 });
 
 var app = builder.Build();
@@ -84,10 +153,21 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    app.UseHsts();
+    
+    var forwardedOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    };
+    forwardedOptions.KnownIPNetworks.Clear();
+    forwardedOptions.KnownProxies.Clear();
+    app.UseForwardedHeaders(forwardedOptions);
+}
+else
+{
+    app.UseDeveloperExceptionPage();
 }
 
-app.UseHttpsRedirection();
+
 app.UseRouting();
 
 
@@ -99,27 +179,5 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>();
 
 app.MapYAuthEndpoints();
-
-await using (var scope = app.Services.CreateAsyncScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await context.Database.EnsureCreatedAsync();
-
-    var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-    if (await manager.FindByClientIdAsync("service-worker") is null)
-    {
-        await manager.CreateAsync(new OpenIddictApplicationDescriptor
-        {
-            DisplayName = "Service Worker",
-            ClientId = "service-worker",
-            ClientSecret = "388D45FA-B36B-4988-BA59-B187D329C207",
-            Permissions =
-            {
-                OpenIddictConstants.Permissions.Endpoints.Token,
-                OpenIddictConstants.Permissions.GrantTypes.ClientCredentials
-            }
-        });
-    }
-}
 
 app.Run();

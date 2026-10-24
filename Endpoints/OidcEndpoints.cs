@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -14,14 +15,13 @@ public abstract class OidcEndpoints : IEndpoint
     public static void RegisterRoutes(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/connect/authorize", async (
-            HttpContext context,
-            SignInManager<User> signInManager) =>
+            [FromServices] HttpContext context,
+            [FromServices] SignInManager<User> signInManager) =>
         {
             var request = context.GetOpenIddictServerRequest() ??
                           throw new InvalidOperationException("The OpenIddict server request cannot be retrieved.");
 
-            var user = await signInManager.GetTwoFactorAuthenticationUserAsync() ??
-                       await signInManager.UserManager.GetUserAsync(context.User);
+            var user = await signInManager.UserManager.GetUserAsync(context.User);
 
             if (user is null)
             {
@@ -43,22 +43,21 @@ public abstract class OidcEndpoints : IEndpoint
 
             identity.SetClaim(OpenIddictConstants.Claims.Email,
                 await signInManager.UserManager.GetEmailAsync(user));
-            
-            if (request.HasScope("groups"))
+
+
+            var roles = await signInManager.UserManager.GetRolesAsync(user);
+
+            foreach (var role in roles)
             {
-                var roles = await signInManager.UserManager.GetRolesAsync(user);
-    
-                foreach (var role in roles)
-                {
-                    identity.AddClaim(new Claim("groups", role));
-                }
+                identity.AddClaim(new Claim(OpenIddictConstants.Claims.Role, role));
             }
+
 
             identity.SetDestinations(claim => claim.Type switch
             {
                 OpenIddictConstants.Claims.Email =>
                     [OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken],
-                "groups" =>
+                OpenIddictConstants.Claims.Role =>
                 [
                     OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken
                 ],
@@ -71,7 +70,7 @@ public abstract class OidcEndpoints : IEndpoint
                 OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         });
 
-        endpoints.MapPost("/connect/token", async (HttpContext context, SignInManager<User> signInManager) =>
+        endpoints.MapPost("/connect/token", async (HttpContext context, [FromServices] SignInManager<User> signInManager) =>
         {
             var request = context.GetOpenIddictServerRequest() ??
                           throw new InvalidOperationException("The OpenIddict server request cannot be retrieved.");
@@ -81,20 +80,21 @@ public abstract class OidcEndpoints : IEndpoint
                 var identity = new ClaimsIdentity(TokenValidationParameters.DefaultAuthenticationType);
                 identity.SetClaim(OpenIddictConstants.Claims.Subject, request.ClientId);
 
-                var principal = new ClaimsPrincipal(identity);
-                principal.SetScopes(request.GetScopes());
+                var ccPrincipal = new ClaimsPrincipal(identity);
+                ccPrincipal.SetScopes(request.GetScopes());
 
-                return Results.SignIn(principal, properties: null,
+                return Results.SignIn(ccPrincipal, properties: null,
                     OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             }
 
             if (!request.IsAuthorizationCodeGrantType() && !request.IsRefreshTokenGrantType())
                 throw new InvalidOperationException("The specified grant type is not supported.");
 
-            var result =
-                await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
-            if (!result.Succeeded)
+            var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var codePrincipal = result.Principal;
+
+            if (codePrincipal is null)
             {
                 return Results.BadRequest(new OpenIddictResponse
                 {
@@ -103,8 +103,17 @@ public abstract class OidcEndpoints : IEndpoint
                 });
             }
 
-            var user = await signInManager.UserManager.FindByIdAsync(
-                result.Principal.GetClaim(OpenIddictConstants.Claims.Subject)!);
+            var userId = codePrincipal.GetClaim(OpenIddictConstants.Claims.Subject);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Results.BadRequest(new OpenIddictResponse
+                {
+                    Error = OpenIddictConstants.Errors.InvalidGrant,
+                    ErrorDescription = "The token claims are malformed."
+                });
+            }
+
+            var user = await signInManager.UserManager.FindByIdAsync(userId);
             if (user is null || !await signInManager.CanSignInAsync(user))
             {
                 return Results.BadRequest(new OpenIddictResponse
@@ -114,9 +123,10 @@ public abstract class OidcEndpoints : IEndpoint
                 });
             }
 
-            return Results.SignIn(result.Principal, properties: null,
+            return Results.SignIn(codePrincipal, properties: null,
                 OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         });
+
 
         endpoints.MapGet("/connect/userinfo", async (HttpContext context, UserManager<User> userManager) =>
         {
