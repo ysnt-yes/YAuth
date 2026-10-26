@@ -34,7 +34,7 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     })
     .AddCookie(IdentityConstants.ExternalScheme);
 
-builder.Services.AddIdentityCore<User>()
+builder.Services.AddIdentityCore<User>(options => { options.Stores.SchemaVersion = IdentitySchemaVersions.Version3; })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddSignInManager()
@@ -42,17 +42,21 @@ builder.Services.AddIdentityCore<User>()
 
 var certsFolder = Path.Combine(storagePath, "certs");
 var certPassword = configuration["Crypto:CertPassword"];
-var signingCertificate = CertificateManager.GetOrCreateSigningCertificate(certsFolder, certPassword ?? throw new InvalidOperationException("Cert Password is NOT SET. Set `Certs__Password` in ENV."));
+var signingCertificate = CertificateManager.GetOrCreateSigningCertificate(certsFolder,
+    certPassword ?? throw new InvalidOperationException("Cert Password is NOT SET. Set `Certs__Password` in ENV."));
 var symmetricEncryptionKey = new SymmetricSecurityKey(
-    Convert.FromBase64String(configuration["Crypto:EncryptionKey"] ?? throw new InvalidOperationException("Encryption Key is NOT SET!")));
+    Convert.FromBase64String(configuration["Crypto:EncryptionKey"] ??
+                             throw new InvalidOperationException("Encryption Key is NOT SET!")));
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
     {
         options.UseEntityFrameworkCore()
             .UseDbContext<AppDbContext>();
-        
-        options.ReplaceApplicationManager<OpenIddictEntityFrameworkCoreApplication, PlainTextApplicationManager<OpenIddictEntityFrameworkCoreApplication>>();
+
+        options
+            .ReplaceApplicationManager<OpenIddictEntityFrameworkCoreApplication,
+                PlainTextApplicationManager<OpenIddictEntityFrameworkCoreApplication>>();
     })
     .AddServer(options =>
     {
@@ -79,7 +83,7 @@ builder.Services.AddOpenIddict()
 
         options.AddSigningCertificate(signingCertificate);
         options.AddEncryptionKey(symmetricEncryptionKey);
-        
+
         options
             .UseAspNetCore()
             .DisableTransportSecurityRequirement()
@@ -100,12 +104,13 @@ builder.Services.AddOpenIddict()
             .DisableTransportSecurityRequirement()
             .EnableRedirectionEndpointPassthrough()
             .EnablePostLogoutRedirectionEndpointPassthrough();
-        
+
         options.AddSigningCertificate(signingCertificate);
         options.AddEncryptionKey(symmetricEncryptionKey);
 
-        var externalAuthProviders = configuration.GetSection("Authentication:Providers").Get<List<ExternalAuthProvider>>() ?? [];
-        
+        var externalAuthProviders =
+            configuration.GetSection("Authentication:Providers").Get<List<ExternalAuthProvider>>() ?? [];
+
         var webProviders = options.UseWebProviders();
 
         foreach (var p in externalAuthProviders)
@@ -145,7 +150,7 @@ var cookiePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.Same
 builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.ExternalScheme, options =>
 {
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = cookiePolicy; 
+    options.Cookie.SecurePolicy = cookiePolicy;
 });
 
 var app = builder.Build();
@@ -153,7 +158,7 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    
+
     var forwardedOptions = new ForwardedHeadersOptions
     {
         ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
@@ -179,5 +184,10 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>();
 
 app.MapYAuthEndpoints();
+
+using (var scope = app.Services.CreateScope())
+{
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
 
 app.Run();
