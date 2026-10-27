@@ -1,0 +1,66 @@
+﻿@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using System.Net
+@using YAuth.Components.Shared
+@using YAuth.Endpoints
+@inject NavigationManager NavigationManager
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IConfiguration Config
+
+<PageTitle>Log In</PageTitle>
+
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 75vh;">
+    <div class="card p-4 shadow-sm" style="width: 100%; max-width: 420px;">
+        <h3 class="card-title text-center mb-3">@(Config["AppName"] ?? "YAuth")</h3>
+        <hr/>
+
+        <input type="hidden" id="hidden-return-url" name="ReturnUrl" value="@(WebUtility.UrlDecode(ReturnUrl))" />
+        
+        <DynamicForm
+            TModel="LoginDto"
+            hx-post="/auth/login"
+            hx-include="#hidden-return-url"
+            hx-target="#error-container"
+        />
+        
+        <div id="error-container"></div>
+        
+        @if (ConfiguredProviders.Any())
+        {
+            <div class="text-center my-3 text-muted position-relative">
+                <hr />
+                <span class="bg-white px-2 position-absolute top-50 start-50 translate-middle">or log in with</span>
+            </div>
+
+            <div class="d-flex flex-column gap-2">
+                @foreach (var provider in ConfiguredProviders)
+                {
+                    var challengeUrl = $"/auth/challenge/{provider.Id}?returnUrl={Uri.EscapeDataString(ReturnUrl ?? "/")}";
+
+                    <a href="@challengeUrl" class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2">
+                        @provider.DisplayName
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+    
+    private List<ExternalAuthProvider> ConfiguredProviders => Config.GetSection("Authentication:Providers").Get<List<ExternalAuthProvider>>() ?? [];
+    
+    protected override void OnInitialized()
+    {
+        var context = HttpContextAccessor.HttpContext ?? throw new NullReferenceException();
+        if (HttpMethods.IsGet(context.Request.Method) && context.User.Identity?.IsAuthenticated == true)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+}

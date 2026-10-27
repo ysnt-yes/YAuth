@@ -1,0 +1,53 @@
+﻿@page "/clients"
+
+@attribute [Authorize(Policy = Policies.AdminPolicy)]
+
+@using OpenIddict.EntityFrameworkCore.Models
+@using YAuth.Components.Shared
+@using YAuth.Endpoints
+@inject IOpenIddictApplicationManager ApplicationManager
+
+<PageTitle>Clients</PageTitle>
+
+<div class="container my-4" style="max-width: 900px;">
+    <h1 class="fs-3 mb-4">OAuth Client Management</h1>
+    
+    <dialog id="newClientDialog" class="dialog">
+        <div class="card">
+            <span class="card-header">Add New Client</span>
+            <DynamicForm
+                TModel="NewOpenIdClientRequest"
+                method="post"
+                hx-post="/api/client/create"
+                hx-target="find .form-errors"
+                hx-swap="innerHTML 400:innerHTML"
+                hx-on::after-request="if (event.detail.xhr.status === 200) { this.closest('dialog').close(); }"                x-on:refreshclientlist.window="clientNameInput = '';"
+                class="form-group card-body"
+                data-enhance-nav="false"
+                CancelButtonText="Cancel"
+                cancel-onclick="this.closest('dialog').close()"/>
+        </div>
+    </dialog>
+
+    <div class="card overflow-hidden"
+        hx-get="/api/client/list"
+         hx-trigger="refreshClientList from:body"
+         hx-target="#client-inventory-list"
+         hx-swap="outerHTML">
+        <div id="client-inventory-list" class="shadow-sm">
+            <OpenIdClientList Model="InitialClients"/>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<OpenIddictEntityFrameworkCoreApplication> InitialClients { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await foreach (var app in ApplicationManager.ListAsync())
+        {
+            InitialClients.Add((OpenIddictEntityFrameworkCoreApplication)app);
+        }
+    }
+}

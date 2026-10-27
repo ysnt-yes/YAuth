@@ -1,0 +1,140 @@
+﻿@using System.Reflection
+@using System.ComponentModel.DataAnnotations
+@typeparam TModel where TModel : class, new()
+
+<form @attributes="ExtraFormProps">
+    <div class="form-errors"></div>
+    @foreach (var prop in _properties)
+    {
+        var meta = GetFieldMetadata(prop);
+        if (meta is null) continue;
+
+        <div class="form-field mb-3">
+            <label for="@meta.Id" class="form-label">@meta.Label</label>
+
+            <input id="@meta.Id"
+                   name="@meta.Name"
+                   type="@meta.Type"
+                   value="@GetPropValue(prop)"
+                   placeholder="@meta.Placeholder"
+                   required="@meta.IsRequired"
+                   minlength="@meta.MinLength"
+                   maxlength="@meta.MaxLength"
+                   min="@meta.Min"
+                   max="@meta.Max"
+                   pattern="@meta.Pattern"
+                   class="form-control"/>
+        </div>
+    }
+
+    <div class="d-flex justify-content-end align-items-center gap-2 mt-4">
+        @if (Cancellable)
+        {
+            <button type="reset"
+                    class="@CancelButtonClass"
+                    @attributes="CancelButtonProps">
+                @CancelButtonText
+            </button>
+        }
+        <button type="submit" class="btn-solid theme-success">@SubmitButtonText</button>
+    </div>
+</form>
+
+@code {
+    [Parameter] public TModel Model { get; set; } = new();
+    [Parameter] public string SubmitButtonText { get; set; } = "Submit";
+
+    [Parameter] public bool Cancellable { get; set; } = true;
+    [Parameter] public string CancelButtonText { get; set; } = "Cancel";
+    [Parameter] public string CancelButtonClass { get; set; } = "btn-solid theme-error";
+    
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AllUnmatchedProps { get; set; }
+
+    private Dictionary<string, object>? ExtraFormProps { get; set; }
+    private Dictionary<string, object>? CancelButtonProps { get; set; }
+    private PropertyInfo[] _properties = [];
+
+    protected override void OnInitialized()
+    {
+        _properties = typeof(TModel).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        
+        ExtraFormProps = new Dictionary<string, object>();
+        CancelButtonProps = new Dictionary<string, object>();
+
+        if (AllUnmatchedProps == null) return;
+        
+        foreach (var kvp in AllUnmatchedProps)
+        {
+            if (kvp.Key.StartsWith("cancel-") && kvp.Key.Length > 7)
+            {
+                CancelButtonProps[kvp.Key[7..]] = kvp.Value;
+            }
+            else
+            {
+                ExtraFormProps[kvp.Key] = kvp.Value;
+            }
+        }
+    }
+
+    private object? GetPropValue(PropertyInfo prop) => prop.GetValue(Model);
+
+    private static FieldMeta? GetFieldMetadata(PropertyInfo prop)
+    {
+        var displayAttr = prop.GetCustomAttribute<DisplayAttribute>();
+        var requiredAttr = prop.GetCustomAttribute<RequiredAttribute>();
+        var stringLengthAttr = prop.GetCustomAttribute<StringLengthAttribute>();
+        var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+        var regexAttr = prop.GetCustomAttribute<RegularExpressionAttribute>();
+        var dataTypeAttr = prop.GetCustomAttribute<DataTypeAttribute>();
+
+        if (displayAttr?.GroupName is "Hidden") return null;
+
+        var inputType = "text";
+        if (dataTypeAttr != null)
+        {
+            inputType = dataTypeAttr.DataType switch
+            {
+                DataType.EmailAddress => "email",
+                DataType.Password => "password",
+                DataType.Date => "date",
+                DataType.PhoneNumber => "tel",
+                _ => "text"
+            };
+        }
+        else if (prop.PropertyType == typeof(int) || prop.PropertyType == typeof(double) || prop.PropertyType == typeof(decimal))
+        {
+            inputType = "number";
+        }
+
+        return new FieldMeta
+        {
+            Id = $"input-{prop.Name.ToLower()}",
+            Name = prop.Name,
+            Label = displayAttr?.GetName() ?? prop.Name,
+            Placeholder = displayAttr?.GetPrompt() ?? string.Empty,
+            Type = inputType,
+            IsRequired = requiredAttr != null,
+            MinLength = stringLengthAttr?.MinimumLength,
+            MaxLength = stringLengthAttr?.MaximumLength,
+            Min = rangeAttr?.Minimum.ToString(),
+            Max = rangeAttr?.Maximum.ToString(),
+            Pattern = regexAttr?.Pattern
+        };
+    }
+
+    private class FieldMeta
+    {
+        public string Id { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public string Label { get; init; } = string.Empty;
+        public string Placeholder { get; init; } = string.Empty;
+        public string Type { get; init; } = "text";
+        public bool IsRequired { get; init; }
+        public int? MinLength { get; init; }
+        public int? MaxLength { get; init; }
+        public string? Min { get; init; }
+        public string? Max { get; init; }
+        public string? Pattern { get; init; }
+    }
+}

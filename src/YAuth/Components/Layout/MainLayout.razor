@@ -1,0 +1,36 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inherits LayoutComponentBase
+@inject UserManager<User> UserManager
+@inject NavigationManager Navigation
+
+
+<div class="page">
+  <header class="navbar text-white">
+    <span class="navbar-brand mb-0 h1">YAuth</span>
+  </header>
+
+  <AuthorizeView>
+    <form action="/auth/logout" method="post">
+      <button type="submit" class="nav-link btn btn-link">Log out</button>
+    </form>
+  </AuthorizeView>
+
+  <main class="content-wrapper p-4">
+    @Body
+  </main>
+</div>
+
+@code {
+  protected override async Task OnInitializedAsync()
+  {
+    var totalUsers = await UserManager.Users.CountAsync();
+
+    var isOnSetup = Navigation.Uri.Contains("/setup");
+    if (totalUsers == 0 && !isOnSetup)
+    {
+      Navigation.NavigateTo("/setup");
+    }
+  }
+
+}

@@ -1,0 +1,119 @@
+﻿@page "/user"
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<User> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+
+
+<AuthorizeView Policy="@Policies.AdminPolicy">
+  <table class="table">
+    <thead>
+    <tr>
+      <th>Username</th>
+      <th>Roles</th>
+      <th>Login Types</th>
+    </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in _userData)
+    {
+      <tr>
+        <td>@row.User.UserName</td>
+        <td>
+          @foreach (var role in row.AssignedRoles)
+          {
+            <div class="bg-primary rounded-5 px-1" style="width: fit-content;">@role</div>
+          }
+          @if (row.AssignedRoles.Count < _allRoles.Count)
+          {
+            <div class="dropdown">
+              <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                      aria-expanded="false">
+                Add to Role
+              </button>
+
+              <ul class="dropdown-menu">
+                @foreach (var role in _allRoles.Where(r => !row.AssignedRoles.Contains(r)))
+                {
+                  <li>
+                    <form hx-post="/api/users/@row.User.Id/roles">
+                      <input type="hidden" name="roleId" value="@role"/>
+                      <button class="dropdown-item" type="submit">@role</button>
+                    </form>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </td>
+        <td>@string.Join(", ", row.Logins)</td>
+      </tr>
+    }
+    </tbody>
+  </table>
+
+</AuthorizeView>
+
+@code {
+
+  private record UserRowModel(
+    User User,
+    HashSet<string> AssignedRoles,
+    IEnumerable<string> Logins
+  );
+
+  private List<UserRowModel> _userData = [];
+  private List<string> _allRoles = [];
+
+  protected override async Task OnInitializedAsync()
+  {
+    _allRoles = RoleManager.Roles
+      .Select(r => r.Name)
+      .Where(name => name != null)
+      .ToList()!;
+
+    var users = UserManager.Users.ToList();
+    var tasks = users.Select(async user =>
+    {
+      var roles = await UserManager.GetRolesAsync(user);
+      var logins = await GetUserAuthMethods(user);
+
+      return new UserRowModel(
+        User: user,
+        AssignedRoles: new HashSet<string>(roles, StringComparer.OrdinalIgnoreCase),
+        Logins: logins
+      );
+    });
+
+    _userData = (await Task.WhenAll(tasks)).ToList();
+  }
+
+  private async Task<IEnumerable<string>> GetUserAuthMethods(User user)
+  {
+    List<string> result = [];
+
+    if (await UserManager.HasPasswordAsync(user))
+    {
+      result.Add("Password");
+    }
+
+    if (await UserManager.GetTwoFactorEnabledAsync(user))
+    {
+      result.Add("MFA");
+    }
+
+    var passkeys = await UserManager.GetPasskeysAsync(user);
+    if (passkeys.Any())
+    {
+      result.Add("Passkey");
+    }
+
+    var logins = await UserManager.GetLoginsAsync(user);
+    if (logins.Any())
+    {
+      result.AddRange(logins.Select(l => l.ProviderDisplayName ?? l.LoginProvider));
+    }
+
+    return result;
+  }
+
+}
