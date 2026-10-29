@@ -9,8 +9,7 @@
 
 <PageTitle>Log In</PageTitle>
 
-<div class="container d-flex justify-content-center align-items-center" style="min-height: 75vh;">
-    <div class="card p-4 shadow-sm" style="width: 100%; max-width: 420px;">
+
         <h3 class="card-title text-center mb-3">@(Config["AppName"] ?? "YAuth")</h3>
         <hr/>
 
@@ -27,11 +26,7 @@
         
         @if (ConfiguredProviders.Any())
         {
-            <div class="text-center my-3 text-muted position-relative">
-                <hr />
-                <span class="bg-white px-2 position-absolute top-50 start-50 translate-middle">or log in with</span>
-            </div>
-
+            <hr/>
             <div class="d-flex flex-column gap-2">
                 @foreach (var provider in ConfiguredProviders)
                 {
@@ -43,8 +38,6 @@
                 }
             </div>
         }
-    </div>
-</div>
 
 
 

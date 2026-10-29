@@ -15,7 +15,6 @@
             <input id="@meta.Id"
                    name="@meta.Name"
                    type="@meta.Type"
-                   value="@GetPropValue(prop)"
                    placeholder="@meta.Placeholder"
                    required="@meta.IsRequired"
                    minlength="@meta.MinLength"
@@ -30,10 +29,10 @@
     <div class="d-flex justify-content-end align-items-center gap-2 mt-4">
         @if (Cancellable)
         {
-            <button type="reset"
-                    class="@CancelButtonClass"
+            <button type="button"
+                    class="btn-solid theme-danger"
                     @attributes="CancelButtonProps">
-                @CancelButtonText
+                Cancel
             </button>
         }
         <button type="submit" class="btn-solid theme-success">@SubmitButtonText</button>
@@ -43,11 +42,8 @@
 @code {
     [Parameter] public TModel Model { get; set; } = new();
     [Parameter] public string SubmitButtonText { get; set; } = "Submit";
-
     [Parameter] public bool Cancellable { get; set; } = true;
-    [Parameter] public string CancelButtonText { get; set; } = "Cancel";
-    [Parameter] public string CancelButtonClass { get; set; } = "btn-solid theme-error";
-    
+
     [Parameter(CaptureUnmatchedValues = true)]
     public Dictionary<string, object>? AllUnmatchedProps { get; set; }
 
@@ -58,12 +54,12 @@
     protected override void OnInitialized()
     {
         _properties = typeof(TModel).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        
+
         ExtraFormProps = new Dictionary<string, object>();
         CancelButtonProps = new Dictionary<string, object>();
 
         if (AllUnmatchedProps == null) return;
-        
+
         foreach (var kvp in AllUnmatchedProps)
         {
             if (kvp.Key.StartsWith("cancel-") && kvp.Key.Length > 7)
@@ -76,9 +72,7 @@
             }
         }
     }
-
-    private object? GetPropValue(PropertyInfo prop) => prop.GetValue(Model);
-
+    
     private static FieldMeta? GetFieldMetadata(PropertyInfo prop)
     {
         var displayAttr = prop.GetCustomAttribute<DisplayAttribute>();

@@ -1,0 +1,44 @@
+﻿
+@foreach (var role in AssignedRoles)
+{
+  <button class="chip theme-primary"
+          hx-delete="/api/users/@UserId/roles?roleId=@role"
+          hx-target="#user-row_@UserId"
+          hx-status:400="swap:none"
+          hx-swap="innerHTML">
+    @role x
+  </button>
+}
+@if (UnassignedRoles.Any())
+{
+  <button class="btn-solid theme-primary" type="button" data-bs-toggle="menu" aria-expanded="false">
+    Add to Role
+  </button>
+
+  <ul class="menu">
+    @foreach (var role in UnassignedRoles)
+    {
+      <li>
+        <button class="btn-text menu-item" 
+                hx-post="/api/users/@UserId/roles"
+                hx-vals='{"roleId": "@role"}'
+                hx-target="#user-row_@UserId">@role</button>
+      </li>
+    }
+  </ul>
+}
+
+@code {
+
+  [Parameter] public required IEnumerable<string> UnassignedRoles { get; set; }
+  [Parameter] public required IEnumerable<string> AssignedRoles { get; set; }
+  [Parameter] public required string UserId { get; set; }
+
+  public static Dictionary<string, object?> Parameters(IEnumerable<string> unassignedRoles, IEnumerable<string> assignedRoles, string userId) => new()
+  {
+    { "UnassignedRoles", unassignedRoles },
+    { "AssignedRoles", assignedRoles },
+    { "UserId", userId }
+  };
+
+}

@@ -26,7 +26,7 @@ There's an override for the actual db location, I'll post an example below.
 ```ini
 # THIS USES ASP.NET ENV SCHEMES, BETTER THAN NOTHING I GUESS!
 # SYSTEM PROPERTIES
-ConnectionStrings__DefaultConnection=Data Source=/app/storage/yauth.db
+ConnectionStrings__DefaultConnection="/app/storage/yauth.db"
 
 # CRYPTO & CERTIFICATE MANAGER SEEDS
 Crypto__CertPassword=SuperSecretHomelabPassword123!

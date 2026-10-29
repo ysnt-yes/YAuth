@@ -17,12 +17,14 @@ var configuration = builder.Configuration;
 var contentRootPath = builder.Environment.ContentRootPath;
 var storagePath = Path.Combine(contentRootPath, "storage");
 
+var dbPath = Path.Combine(storagePath, configuration.GetConnectionString("DefaultConnection") ?? "yauth.db");
+
 builder.Services.AddRazorComponents();
 builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseSqlite(configuration.GetConnectionString("DefaultConnection") ?? $"Data Source={storagePath}/yauth.db");
+    options.UseSqlite($"Data Source={dbPath}");
     options.UseOpenIddict();
 });
 
@@ -31,7 +33,7 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     {
         options.AccessDeniedPath = new PathString("/forbidden");
         options.LoginPath = new PathString("/login");
-        options.LogoutPath = new PathString("/logout");
+        options.LogoutPath = new PathString("/auth/logout");
 
         options.Events.OnRedirectToAccessDenied = context =>
         {
@@ -50,10 +52,10 @@ builder.Services.AddIdentityCore<User>(options => { options.Stores.SchemaVersion
 var certsFolder = Path.Combine(storagePath, "certs");
 var certPassword = configuration["Crypto:CertPassword"];
 var signingCertificate = CertificateManager.GetOrCreateSigningCertificate(certsFolder,
-    certPassword ?? throw new InvalidOperationException("Cert Password is NOT SET. Set `Certs__Password` in ENV."));
+    certPassword ?? throw new InvalidOperationException("Crypto__CertPassword is NOT SET."));
 var symmetricEncryptionKey = new SymmetricSecurityKey(
     Convert.FromBase64String(configuration["Crypto:EncryptionKey"] ??
-                             throw new InvalidOperationException("Encryption Key is NOT SET!")));
+                             throw new InvalidOperationException("Crypto__EncryptionKey is NOT SET!")));
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>

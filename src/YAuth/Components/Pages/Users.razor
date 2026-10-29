@@ -1,65 +1,40 @@
 ﻿@page "/user"
+@attribute [Authorize(Policy = Policies.AdminPolicy)]
 @using Microsoft.AspNetCore.Identity
+@using YAuth.Components.Shared
 @inject UserManager<User> UserManager
 @inject RoleManager<IdentityRole> RoleManager
 
-
-<AuthorizeView Policy="@Policies.AdminPolicy">
-  <table class="table">
-    <thead>
+<table class="table">
+  <thead>
+  <tr>
+    <th>Username</th>
+    <th>Roles</th>
+    <th>Login Types</th>
+  </tr>
+  </thead>
+  <tbody>
+  @foreach (var row in _userData)
+  {
     <tr>
-      <th>Username</th>
-      <th>Roles</th>
-      <th>Login Types</th>
+      <td>@row.User.UserName</td>
+      <td id="user-row_@row.User.Id">
+        <UserRow UserId="@row.User.Id" AssignedRoles="row.AssignedRoles" UnassignedRoles="row.UnassignedRoles"/>
+      </td>
+      <td>@string.Join(", ", row.Logins)</td>
     </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in _userData)
-    {
-      <tr>
-        <td>@row.User.UserName</td>
-        <td>
-          @foreach (var role in row.AssignedRoles)
-          {
-            <div class="bg-primary rounded-5 px-1" style="width: fit-content;">@role</div>
-          }
-          @if (row.AssignedRoles.Count < _allRoles.Count)
-          {
-            <div class="dropdown">
-              <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"
-                      aria-expanded="false">
-                Add to Role
-              </button>
+  }
+  </tbody>
+</table>
 
-              <ul class="dropdown-menu">
-                @foreach (var role in _allRoles.Where(r => !row.AssignedRoles.Contains(r)))
-                {
-                  <li>
-                    <form hx-post="/api/users/@row.User.Id/roles">
-                      <input type="hidden" name="roleId" value="@role"/>
-                      <button class="dropdown-item" type="submit">@role</button>
-                    </form>
-                  </li>
-                }
-              </ul>
-            </div>
-          }
-        </td>
-        <td>@string.Join(", ", row.Logins)</td>
-      </tr>
-    }
-    </tbody>
-  </table>
-
-</AuthorizeView>
 
 @code {
 
   private record UserRowModel(
     User User,
-    HashSet<string> AssignedRoles,
-    IEnumerable<string> Logins
-  );
+    IEnumerable<string> AssignedRoles,
+    IEnumerable<string> UnassignedRoles,
+    IEnumerable<string> Logins);
 
   private List<UserRowModel> _userData = [];
   private List<string> _allRoles = [];
@@ -76,10 +51,12 @@
     {
       var roles = await UserManager.GetRolesAsync(user);
       var logins = await GetUserAuthMethods(user);
+      var unassigned = _allRoles.Where(r => !roles.Contains(r)).ToList();
 
       return new UserRowModel(
         User: user,
-        AssignedRoles: new HashSet<string>(roles, StringComparer.OrdinalIgnoreCase),
+        AssignedRoles: roles,
+        UnassignedRoles: unassigned,
         Logins: logins
       );
     });

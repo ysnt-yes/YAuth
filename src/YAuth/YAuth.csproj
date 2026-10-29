@@ -32,7 +32,19 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="wwwroot\lib\" />
+      <Compile Remove="storage\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Remove="storage\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Remove="storage\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="storage\**" />
     </ItemGroup>
 
 </Project>
